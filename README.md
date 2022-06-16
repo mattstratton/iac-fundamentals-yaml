@@ -40,4 +40,4 @@ For this workshop, we will use Docker to help you learn the basics of Pulumi
 without a cloud account. We will explore creating a Pulumi Project, building
 Docker images, and configuring and provisioning containers.
 
-Let's get started!
+Let's [get started](lab-1/README.md)!

@@ -210,6 +210,6 @@ to create your infrastructure. You can write the entire program and then run it.
 We're only doing a step-by-step process here to make learning easier.
 ```
 
-From here, we can move on to configuring and provisioning our containers.
+From here, we can move on to [configuring and provisioning our containers](../lab-2/README.md).
 
 Onward!
