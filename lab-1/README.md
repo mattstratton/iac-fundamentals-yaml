@@ -25,20 +25,16 @@ you need, so let's use that command. The `-y` flag answers "yes" to the prompts 
 create a default project:
 
 ```bash
-$ pulumi new python -y
+$ pulumi new yaml -y
 ```
 This command prints output similar to the following example with a bit more
 information and status as it goes:
 
 ```bash
+Created project 'my_first_app'
+# ...
 Created stack 'dev'
 
-Creating virtual environment...
-
-Finished creating virtual environment
-
-Updating pip, setuptools, and wheel in virtual environment...
-...
 Your new project is ready to go! ✨
 
 To perform an initial deployment, run 'pulumi up'
@@ -51,18 +47,20 @@ This command creates all the files we need, initializes a new stack named `dev`
 
 The basic project created by `pulumi new` is comprised of multiple files:
 
-- `Pulumi.yaml`: your project's metadata, containing its name and language
-- `__main__.py`: your program's main entrypoint file
-- `requirements.txt`: your project's Python dependency information
-- `venv`: a [virtualenv](https://pypi.org/project/virtualenv/) for your project
+- `Pulumi.yaml`: your project's metadata, containing its name and language, and also your program's main entrypoint file
 
-Use the command `cat __main__.py` to explore the contents of your
+Use the command `cat Pulumi.yaml` to explore the contents of your
 project's empty program:
 
-```python
-"""A Python Pulumi program"""
-
-import pulumi
+```yaml
+description: ${DESCRIPTION}
+runtime: yaml
+template:
+    description: A minimal Pulumi YAML program
+configuration: {}
+variables: {}
+resources: {}
+outputs: {}
 ```
 
 Feel free to explore the other files, although we won't be editing any of them
@@ -77,7 +75,7 @@ configuration and implementation) via component resources.
 
 In this case, our resources are going to be Docker containers and images that we
 build locally using infrastructure as code. Our resource provider is Docker, and
-we're using Python as our _language host_, or the executor that compiles the
+we're using YAML as our _language host_, or the executor that compiles the
 code we write and interprets it for Pulumi.
 
 ```text
@@ -89,22 +87,14 @@ the major cloud providers to build with Pulumi.
 
 ## Verify your application
 
-Create a directory called `app` inside the `my-first-app` directory you made in
-the previous tutorial. Clone the code repository there, then move everything
-from the code repository directory to the `app/` directory:
+Let’s explore what app we’re deploying on the infrastructure we’re creating. Open up 
+the [pulumi/tutorial-pulumi-fundamentals repo](https://github.com/pulumi/tutorial-pulumi-fundamentals). Let’s explore the contents of the `app/` 
+directory. There is a backend, a frontend, and a data directory. All three directories 
+contain a Dockerfile that builds the application images.
 
-```bash
-mkdir app
-cd app
-git clone git@github.com:pulumi/tutorial-pulumi-fundamentals.git
-mv -f tutorial-pulumi-fundamentals/* . && rm -rf tutorial-pulumi-fundamentals/
-```
+Let’s examine the backend `Dockerfile` in `app/backend/Dockerfile`:
 
-Let's explore the contents of the `app/` directory. There is a backend, a
-frontend, and a data directory. Both the frontend and backend directories
-contain a `Dockerfile` that builds the application images.
 
-Let's examine the backend `Dockerfile` in `app/backend/Dockerfile`:
 
 ```docker
 FROM node:14
@@ -127,57 +117,20 @@ host machine.
 
 ## Build your Docker Image with Pulumi
 
-Before we start writing our Pulumi program, we need to install the right
-provider. In this case, we want to use the `pulumi_docker` provider for Python,
-our language host. It's always good practice for Python to work inside a virtual
-environment, or venv, so let's activate our venv and use `pip` to install the
-provider along with the main Pulumi package:
+Back inside your Pulumi program, let’s build your first Docker image. Remember that a Pulumi program is the code that defines the desired state of your infrastructure using a general-purpose programming language. In this case, we’re using YAML , so our main file is `Pulumi.yaml` . Inside your program’s `Pulumi.yaml` file, use any editor to add the following code:
 
-```bash
-cd ../
-source venv/bin/activate
-pip3 install pulumi_docker
+```yaml
+name: fundamentals
+runtime: yaml
+description: A minimal Pulumi YAML program
+resources:
+  backend-image:
+    type: docker:index:RemoteImage
+    properties:
+      name: pulumi/tutorial-pulumi-fundamentals-backend:latest
 ```
 
-You should see output showing the provider package being installed, just like
-for any Python package install. Add the package to the `requirements.txt` file
-by adding `pulumi_docker` on a new line at the end of the file.
-
-Back inside your Pulumi program, let's build your first Docker image. Remember
-that a Pulumi program is the code that defines the desired state of your
-infrastructure using a general-purpose programming language. In this case, we're
-using Python, so our main file is `__main__.py` Inside your program's
-`__main__ py`file, use any editor to add the following code:
-
-
-```python
-import os
-import pulumi
-import pulumi_docker as docker
-
-stack = pulumi.get_stack()
-
-# build our backend image!
-backend_image_name = "backend"
-backend = docker.Image("backend",
-                        build=docker.DockerBuild(context=f"{os.getcwd()}/app/backend"),
-                        image_name=f"{backend_image_name}:{stack}",
-                        skip_push=True
-                        )
-```
-
-In this file, we import the main Pulumi package and the Docker provider. Then,
-we figure out which stack we're operating against, and populate the `stack`
-variable for later use. When we build our backend image, we name it in our stack
-as "backend" before passing some arguments to the Docker provider. The Docker
-provider uses the build context and the image name to build an image, and it
-does not push the image up anywhere.
-
-Notice that we're mixing in some language constructs in here like `os.getcwd()`.
-With Pulumi, we have access to the full language ecosystem, including
-third-party libraries. Pulumi also has typing support, so you can use the tools
-in your favorite IDE, like completion, to verify that you're using the correct
-types for any inputs you're using. Pretty cool!
+In this file, we’re defining a `RemoteImage` resource using the Docker provider. The properties are the arguments (or *inputs* in Pulumi terms) that the resource takes. The Docker provider uses the `name` input to pull a remote image for us to use.
 
 Run `pulumi up`.
 
@@ -204,9 +157,6 @@ In our case here, the Docker
 takes the following inputs:
 
 - `name`: a name for the resource we are creating
-- `build`: the Docker build context (i.e., the path to the app)
-- `image_name`: the qualified image name which can include a tag
-- `skip_push`: a flag that defines whether to push to a registry
 
 Now that we've provisioned our first piece of infrastructure, let's add the
 other pieces of our application.
@@ -216,53 +166,38 @@ other pieces of our application.
 Our application includes a frontend client and MongoDB. We'll add them to the
 program, so add this code after the previous fragment.
 
-```python
-# build our frontend image!
-frontend_image_name = "frontend"
-frontend = docker.Image("frontend",
-                        build=docker.DockerBuild(context=f"{os.getcwd()}/app/frontend"),
-                        image_name=f"{frontend_image_name}:{stack}",
-                        skip_push=True
-                        )
+```yaml
+frontend-image:
+    type: docker:index:RemoteImage
+    properties:
+      name: pulumi/tutorial-pulumi-fundamentals-frontend:latest
+mongo-image:
+  type: docker:index:RemoteImage
+  properties:
+    name: pulumi/tutorial-pulumi-fundamentals-database-local:latest
 ```
 
-We build the frontend client the same way we built the backend. However, we are
-going to use the official MongoDB image from Docker Hub, so we use the
-[`RemoteImage`](https://www.pulumi.com/registry/packages/docker/api-docs/remoteimage/)
-resource.
-
-```python
-# build our mongodb image!
-mongo_image = docker.RemoteImage("mongo", name="mongo:bionic")
-```
+We build the frontend client and the populated MongoDB database image the same way we built the backend.
 
 Compare your program now to this complete program before we move forward:
 
-```python
-import os
-import pulumi
-import pulumi_docker as docker
-
-stack = pulumi.get_stack()
-
-# build our backend image!
-backend_image_name = "backend"
-backend = docker.Image("backend",
-                        build=docker.DockerBuild(context=f"{os.getcwd()}/app/backend"),
-                        image_name=f"{backend_image_name}:{stack}",
-                        skip_push=True
-                        )
-
-# build our frontend image!
-frontend_image_name = "frontend"
-frontend = docker.Image("frontend",
-                        build=docker.DockerBuild(context=f"{os.getcwd()}/app/frontend"),
-                        image_name=f"{frontend_image_name}:{stack}",
-                        skip_push=True
-                        )
-
-# build our mongodb image!
-mongo_image = docker.RemoteImage("mongo", name="mongo:bionic")
+```yaml
+name: fundamentals
+runtime: yaml
+description: a yaml test
+resources:
+  backend-image:
+    type: docker:index:RemoteImage
+    properties:
+      name: pulumi/tutorial-pulumi-fundamentals-backend:latest
+  frontend-image:
+    type: docker:index:RemoteImage
+    properties:
+      name: pulumi/tutorial-pulumi-fundamentals-frontend:latest
+  mongo-image:
+    type: docker:index:RemoteImage
+    properties:
+      name: pulumi/tutorial-pulumi-fundamentals-database-local:latest
 ```
 
 If your code looks the same, great! Otherwise, update yours to match this code.
